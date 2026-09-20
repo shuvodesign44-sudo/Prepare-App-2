@@ -1,0 +1,153 @@
+{
+  "version": 1,
+  "sdk_version": "0.26.2",
+  "path": "/mcp",
+  "auth": {
+    "type": "oauth",
+    "issuer": "https://kftczwxfslpjfinaqnlr.supabase.co/auth/v1",
+    "accepted_audiences": [
+      "authenticated"
+    ]
+  },
+  "mcp": {
+    "server": {
+      "name": "englishpro-ai",
+      "version": "0.1.0",
+      "title": "EnglishPro AI"
+    },
+    "tools": [
+      {
+        "name": "get_my_progress",
+        "title": "Get my progress",
+        "description": "Get the signed-in candidate's Prepare profile: target exam, level, XP, coins, streak and daily study goal.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {}
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "list_mcq_attempts",
+        "title": "List MCQ attempts",
+        "description": "List the signed-in candidate's recent MCQ practice attempts with category, score, difficulty and duration.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "limit": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991,
+              "description": "How many recent attempts to return (1-25). Defaults to 10."
+            },
+            "category": {
+              "type": "string",
+              "description": "Optional exam category filter, e.g. 'BCS Preliminary'."
+            }
+          }
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "get_study_plan",
+        "title": "Get study plan",
+        "description": "Get the signed-in candidate's latest AI study roadmap: target exam, summary, weekly plan and daily tasks.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {}
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "list_contests",
+        "title": "List live contests",
+        "description": "List public Prepare live exam contests with their exam category, subject, start time, duration and status.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "string",
+              "enum": [
+                "scheduled",
+                "live",
+                "finished"
+              ],
+              "description": "Optional status filter."
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991,
+              "description": "How many contests to return (1-25). Defaults to 10."
+            }
+          }
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "update_study_goal",
+        "title": "Update study goal",
+        "description": "Update the signed-in candidate's preparation goal: target exam, level, exam date and daily study minutes.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "target_exam": {
+              "type": "string",
+              "description": "Target exam, e.g. '46th BCS Preliminary'."
+            },
+            "level": {
+              "type": "string",
+              "enum": [
+                "beginner",
+                "intermediate",
+                "advanced"
+              ],
+              "description": "Current preparation level."
+            },
+            "exam_date": {
+              "type": "string",
+              "description": "Exam date as YYYY-MM-DD."
+            },
+            "daily_minutes": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991,
+              "description": "Daily study minutes target (10-600)."
+            }
+          }
+        },
+        "outputSchema": null
+      }
+    ]
+  }
+}
