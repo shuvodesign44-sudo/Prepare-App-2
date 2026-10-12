@@ -1,4 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { App } from "@capacitor/app";
+import { Browser } from "@capacitor/browser";
+import { Capacitor } from "@capacitor/core";
 import {
   Outlet,
   Link,
@@ -8,12 +11,11 @@ import {
   Scripts,
 } from "@tanstack/react-router";
 import { useEffect, type ReactNode } from "react";
-import { Toaster } from "sonner";
+import { Toaster, toast } from "sonner";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { supabase } from "@/integrations/supabase/client";
-
 
 function NotFoundComponent() {
   return (
@@ -126,6 +128,64 @@ function RootComponent() {
   const router = useRouter();
 
   useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+    let active = true;
+
+    async function finishOAuth(url: string) {
+      let callback: URL;
+      try {
+        callback = new URL(url);
+      } catch {
+        return;
+      }
+      if (
+        callback.protocol !== "com.prepareai.app:" ||
+        callback.hostname !== "auth" ||
+        callback.pathname !== "/callback"
+      )
+        return;
+
+      try {
+        await Browser.close().catch(() => undefined);
+        const oauthError =
+          callback.searchParams.get("error_description") ?? callback.searchParams.get("error");
+        if (oauthError) throw new Error(oauthError);
+        const code = callback.searchParams.get("code");
+        if (!code)
+          throw new Error("Google sign-in returned no authorization code. Please try again.");
+        const { error } = await supabase.auth.exchangeCodeForSession(code);
+        if (error) throw error;
+        if (!active) return;
+        const next = sessionStorage.getItem("prepareai.auth.next");
+        sessionStorage.removeItem("prepareai.auth.next");
+        const safeTarget =
+          next && next.startsWith("/") && !next.startsWith("//") && !next.includes("\\")
+            ? next
+            : "/dashboard";
+        window.location.replace(safeTarget);
+      } catch (error) {
+        if (active)
+          toast.error(
+            error instanceof Error ? error.message : "Google sign-in failed. Please try again.",
+          );
+      }
+    }
+
+    const listener = App.addListener("appUrlOpen", ({ url }) => {
+      void finishOAuth(url);
+    });
+    void listener.then(async (handle) => {
+      const launch = await App.getLaunchUrl();
+      if (active && launch?.url) await finishOAuth(launch.url);
+      if (!active) await handle.remove();
+    });
+    return () => {
+      active = false;
+      void listener.then((handle) => handle.remove());
+    };
+  }, []);
+
+  useEffect(() => {
     const { data } = supabase.auth.onAuthStateChange((event) => {
       if (event !== "SIGNED_IN" && event !== "SIGNED_OUT" && event !== "USER_UPDATED") return;
       router.invalidate();
@@ -142,4 +202,3 @@ function RootComponent() {
     </QueryClientProvider>
   );
 }
-

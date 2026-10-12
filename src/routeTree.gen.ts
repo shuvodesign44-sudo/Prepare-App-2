@@ -31,6 +31,7 @@ import { Route as AuthenticatedPracticeRouteImport } from './routes/_authenticat
 import { Route as AuthenticatedProfileRouteImport } from './routes/_authenticated/profile'
 import { Route as AuthenticatedRoadmapRouteImport } from './routes/_authenticated/roadmap'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
+import { Route as AuthenticatedTutorRouteImport } from './routes/_authenticated/tutor'
 import { Route as AuthenticatedVivaRouteImport } from './routes/_authenticated/viva'
 import { Route as DotlovableOauthConsentRouteImport } from './routes/[.]lovable.oauth.consent'
 import { Route as Char91DotmcpChar93InvokeToolToolRouteImport } from './routes/[.mcp]/invoke-tool/$tool'
@@ -148,6 +149,11 @@ const AuthenticatedSettingsRoute = AuthenticatedSettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedTutorRoute = AuthenticatedTutorRouteImport.update({
+  id: '/tutor',
+  path: '/tutor',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedVivaRoute = AuthenticatedVivaRouteImport.update({
   id: '/viva',
   path: '/viva',
@@ -193,6 +199,7 @@ export interface FileRoutesByFullPath {
   '/profile': typeof AuthenticatedProfileRoute
   '/roadmap': typeof AuthenticatedRoadmapRoute
   '/settings': typeof AuthenticatedSettingsRoute
+  '/tutor': typeof AuthenticatedTutorRoute
   '/viva': typeof AuthenticatedVivaRoute
   '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
   '/.mcp/invoke-tool/$tool': typeof Char91DotmcpChar93InvokeToolToolRoute
@@ -220,6 +227,7 @@ export interface FileRoutesByTo {
   '/profile': typeof AuthenticatedProfileRoute
   '/roadmap': typeof AuthenticatedRoadmapRoute
   '/settings': typeof AuthenticatedSettingsRoute
+  '/tutor': typeof AuthenticatedTutorRoute
   '/viva': typeof AuthenticatedVivaRoute
   '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
   '/.mcp/invoke-tool/$tool': typeof Char91DotmcpChar93InvokeToolToolRoute
@@ -249,6 +257,7 @@ export interface FileRoutesById {
   '/_authenticated/profile': typeof AuthenticatedProfileRoute
   '/_authenticated/roadmap': typeof AuthenticatedRoadmapRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
+  '/_authenticated/tutor': typeof AuthenticatedTutorRoute
   '/_authenticated/viva': typeof AuthenticatedVivaRoute
   '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
   '/.mcp/invoke-tool/$tool': typeof Char91DotmcpChar93InvokeToolToolRoute
@@ -278,6 +287,7 @@ export interface FileRouteTypes {
     | '/profile'
     | '/roadmap'
     | '/settings'
+    | '/tutor'
     | '/viva'
     | '/.lovable/oauth/consent'
     | '/.mcp/invoke-tool/$tool'
@@ -305,6 +315,7 @@ export interface FileRouteTypes {
     | '/profile'
     | '/roadmap'
     | '/settings'
+    | '/tutor'
     | '/viva'
     | '/.lovable/oauth/consent'
     | '/.mcp/invoke-tool/$tool'
@@ -333,6 +344,7 @@ export interface FileRouteTypes {
     | '/_authenticated/profile'
     | '/_authenticated/roadmap'
     | '/_authenticated/settings'
+    | '/_authenticated/tutor'
     | '/_authenticated/viva'
     | '/.lovable/oauth/consent'
     | '/.mcp/invoke-tool/$tool'
@@ -508,6 +520,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSettingsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/tutor': {
+      id: '/_authenticated/tutor'
+      path: '/tutor'
+      fullPath: '/tutor'
+      preLoaderRoute: typeof AuthenticatedTutorRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/viva': {
       id: '/_authenticated/viva'
       path: '/viva'
@@ -554,6 +573,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedProfileRoute: typeof AuthenticatedProfileRoute
   AuthenticatedRoadmapRoute: typeof AuthenticatedRoadmapRoute
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
+  AuthenticatedTutorRoute: typeof AuthenticatedTutorRoute
   AuthenticatedVivaRoute: typeof AuthenticatedVivaRoute
   AuthenticatedContestContestIdRoute: typeof AuthenticatedContestContestIdRoute
 }
@@ -573,6 +593,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedProfileRoute: AuthenticatedProfileRoute,
   AuthenticatedRoadmapRoute: AuthenticatedRoadmapRoute,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
+  AuthenticatedTutorRoute: AuthenticatedTutorRoute,
   AuthenticatedVivaRoute: AuthenticatedVivaRoute,
   AuthenticatedContestContestIdRoute: AuthenticatedContestContestIdRoute,
 }

@@ -1,6 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { loadProfile, saveProfile, profileKey, backendRetry } from "@/lib/backend";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { saveOnboarding } from "@/lib/prepare.functions";
@@ -12,6 +13,9 @@ import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/_authenticated/onboarding")({
+  validateSearch: (search: Record<string, unknown>): { backendProfile?: boolean } => ({
+    backendProfile: search.backendProfile === true || search.backendProfile === "true",
+  }),
   head: () => ({
     meta: [
       { title: "Set up your plan — Prepare" },
@@ -29,6 +33,16 @@ const minutes = [30, 60, 90, 120, 180, 240];
 function Onboarding() {
   const navigate = useNavigate();
   const save = useServerFn(saveOnboarding);
+  const { backendProfile } = Route.useSearch();
+  const { user } = Route.useRouteContext();
+  const queryClient = useQueryClient();
+  const account = useQuery({
+    queryKey: profileKey(user.id),
+    queryFn: ({ signal }) => loadProfile(signal),
+    enabled: backendProfile,
+    retry: backendRetry,
+  });
+  const [loadedId, setLoadedId] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [exam, setExam] = useState<string>(TARGET_EXAMS[0]);
   const [level, setLevel] = useState("Beginner");
@@ -43,9 +57,36 @@ function Onboarding() {
     });
   }, []);
 
+  useEffect(() => {
+    if (backendProfile && account.data && loadedId !== account.data.id) {
+      const profile = account.data;
+      setName(profile.display_name);
+      setExam(profile.target_exam);
+      setLevel(profile.level[0].toUpperCase() + profile.level.slice(1));
+      setDaily(profile.daily_minutes);
+      setLanguage(profile.language === "bn" ? "Bangla" : "English");
+      setExamDate(profile.exam_date || "");
+      setLoadedId(profile.id);
+    }
+  }, [account.data, backendProfile, loadedId]);
+
   const mutation = useMutation({
-    mutationFn: () =>
-      save({
+    mutationFn: async () => {
+      if (backendProfile) {
+        if (!account.data) throw new Error("Load your profile before editing.");
+        const profile = await saveProfile({
+          ...account.data,
+          display_name: name.trim() || "Candidate",
+          target_exam: exam,
+          level: level.toLowerCase() as "beginner" | "intermediate" | "advanced",
+          daily_minutes: daily,
+          language: language === "Bangla" ? "bn" : "en",
+          exam_date: examDate || null,
+        });
+        queryClient.setQueryData(profileKey(user.id), profile);
+        return;
+      }
+      await save({
         data: {
           displayName: name.trim() || "Candidate",
           targetExam: exam,
@@ -54,8 +95,9 @@ function Onboarding() {
           contentLanguage: language,
           examDate: examDate || null,
         },
-      }),
-    onSuccess: () => navigate({ to: "/dashboard" }),
+      });
+    },
+    onSuccess: () => navigate({ to: backendProfile ? "/profile" : "/dashboard" }),
     onError: (error: Error) => toast.error(error.message),
   });
 
@@ -67,7 +109,25 @@ function Onboarding() {
           A few answers and your first challenge is ready.
         </p>
 
-        <div className="mt-8 space-y-8">
+        {backendProfile && account.isPending && (
+          <p role="status" className="mt-4 text-sm">
+            Loading your profile…
+          </p>
+        )}
+        {backendProfile && account.error && (
+          <div role="alert" className="mt-4 text-sm">
+            <p>{account.error.message}</p>
+            <button className="text-primary underline" onClick={() => void account.refetch()}>
+              Retry
+            </button>
+          </div>
+        )}
+        <fieldset
+          disabled={
+            mutation.isPending || (backendProfile && (!account.data || Boolean(account.error)))
+          }
+          className="mt-8 space-y-8"
+        >
           <div className="space-y-2">
             <Label htmlFor="name">Your name</Label>
             <Input
@@ -129,15 +189,17 @@ function Onboarding() {
               className="h-12 rounded-xl"
             />
           </div>
-        </div>
+        </fieldset>
 
         <Button
           size="lg"
           className="mt-10 h-14 w-full rounded-2xl text-base font-semibold"
-          disabled={mutation.isPending}
+          disabled={
+            mutation.isPending || (backendProfile && (!account.data || Boolean(account.error)))
+          }
           onClick={() => mutation.mutate()}
         >
-          {mutation.isPending ? "Saving…" : "Start preparing"}
+          {mutation.isPending ? "Saving…" : backendProfile ? "Save profile" : "Start preparing"}
         </Button>
       </div>
     </main>

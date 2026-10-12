@@ -1,9 +1,10 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { Browser } from "@capacitor/browser";
+import { Capacitor } from "@capacitor/core";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { Mail, Lock, User, Phone, Eye, EyeOff, Loader2, ArrowLeft } from "lucide-react";
 import { z } from "zod";
 import { supabase } from "@/integrations/supabase/client";
-import { lovable } from "@/integrations/lovable/index";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -69,6 +70,7 @@ const signInSchema = z.object({
   email: emailSchema,
   password: z.string().min(1, "Enter your password"),
 });
+const NATIVE_AUTH_CALLBACK = "com.prepareai.app://auth/callback";
 const empty = {
   firstName: "",
   lastName: "",
@@ -93,10 +95,10 @@ function AuthScreen() {
   const [canReset, setCanReset] = useState(false);
   const pending = useRef(false);
   const recovering = useRef(Boolean(recovery));
-  const afterAuth = () => {
+  const afterAuth = useCallback(() => {
     if (next) window.location.replace(next);
     else void navigate({ to: "/dashboard", replace: true });
-  };
+  }, [navigate, next]);
 
   useEffect(() => {
     let active = true;
@@ -246,13 +248,22 @@ function AuthScreen() {
     setError("");
     setNotice("");
     try {
-      const result = await lovable.auth.signInWithOAuth("google", { redirect_uri: callbackUrl() });
-      if (result.error) throw result.error;
-      if (result.redirected) return;
-      const { data, error } = await supabase.auth.getSession();
+      const native = Capacitor.isNativePlatform();
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: native ? NATIVE_AUTH_CALLBACK : callbackUrl(),
+          skipBrowserRedirect: native,
+          queryParams: { prompt: "select_account" },
+        },
+      });
       if (error) throw error;
-      if (!data.session) throw new Error("Google sign-in did not complete. Please try again.");
-      afterAuth();
+      if (native) {
+        if (!data.url) throw new Error("Google sign-in could not be started. Please try again.");
+        if (next) sessionStorage.setItem("prepareai.auth.next", next);
+        else sessionStorage.removeItem("prepareai.auth.next");
+        await Browser.open({ url: data.url });
+      }
     } catch (error) {
       setError(error instanceof Error ? error.message : "Google sign-in failed. Please try again.");
     } finally {

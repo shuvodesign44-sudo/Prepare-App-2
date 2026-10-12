@@ -8,7 +8,8 @@ export const Route = createFileRoute("/_authenticated/ai")({
       { title: "AI Coach — Prepare" },
       {
         name: "description",
-        content: "AI viva test, mock interview, career assistant and document writing in one place.",
+        content:
+          "AI viva test, mock interview, career assistant and document writing in one place.",
       },
       { property: "og:title", content: "AI Coach — Prepare" },
       { property: "og:description", content: "Practise speaking and get AI career guidance." },
@@ -19,16 +20,22 @@ export const Route = createFileRoute("/_authenticated/ai")({
 
 const TOOLS = [
   {
+    to: "/tutor",
+    icon: Sparkles,
+    title: "AI Tutor",
+    body: "Ask study questions in English or Bangla.",
+  },
+  {
     to: "/viva",
     icon: Mic,
     title: "AI Viva Test",
-    body: "Board-style viva with scoring on fluency, confidence and grammar.",
+    body: "Typed-answer feedback on relevance and content.",
   },
   {
     to: "/viva",
     icon: UserCheck,
     title: "AI Mock Interview",
-    body: "Full interview simulation with follow-up questions and a final report.",
+    body: "Practise interview answers and follow-up questions.",
   },
   {
     to: "/career",

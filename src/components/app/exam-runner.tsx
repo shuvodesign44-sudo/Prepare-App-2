@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Bookmark, BookmarkCheck, Clock, Sparkles } from "lucide-react";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
@@ -17,6 +17,11 @@ export interface ExamRunnerProps {
   negativeMarking?: number;
   onSubmit: (answers: Record<string, number>, secondsLeft: number) => void;
   onTabSwitch?: () => void;
+  onExpire?: () => void;
+  locked?: boolean;
+  practiceOnly?: boolean;
+  onBookmark?: (question: McqQuestion) => Promise<unknown>;
+  savedQuestionIds?: string[];
 }
 
 export function ExamRunner({
@@ -27,23 +32,37 @@ export function ExamRunner({
   negativeMarking,
   onSubmit,
   onTabSwitch,
+  onExpire,
+  locked = false,
+  practiceOnly = false,
+  onBookmark,
+  savedQuestionIds = [],
 }: ExamRunnerProps) {
   const [index, setIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, number>>({});
   const [secondsLeft, setSecondsLeft] = useState(initialSeconds);
+  const endTime = useRef(Date.now() + initialSeconds * 1000);
   const [saved, setSaved] = useState<Record<number, boolean>>({});
+  const [saving, setSaving] = useState(false);
+  const saveBusy = useRef(false);
   const [hint, setHint] = useState<string | null>(null);
 
   const save = useServerFn(addBookmark);
   const explain = useServerFn(explainQuestion);
 
   useEffect(() => {
-    const timer = setInterval(() => setSecondsLeft((value) => Math.max(0, value - 1)), 1000);
+    const timer = setInterval(
+      () => setSecondsLeft(Math.max(0, Math.ceil((endTime.current - Date.now()) / 1000))),
+      1000,
+    );
     return () => clearInterval(timer);
   }, []);
 
   useEffect(() => {
-    if (secondsLeft === 0 && !submitting) onSubmit(answers, 0);
+    if (secondsLeft === 0 && !submitting) {
+      if (onExpire) onExpire();
+      else onSubmit(answers, 0);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [secondsLeft]);
 
@@ -59,6 +78,7 @@ export function ExamRunner({
   useEffect(() => setHint(null), [index]);
 
   const current = questions[index];
+  const isSaved = saved[index] || (current.id ? savedQuestionIds.includes(current.id) : false);
   const answered = useMemo(() => Object.keys(answers).length, [answers]);
   const danger = secondsLeft <= 60;
 
@@ -108,26 +128,41 @@ export function ExamRunner({
       <div className="surface-card mt-4 p-5">
         <div className="flex items-start justify-between gap-3">
           <p className="text-base font-semibold leading-relaxed">{current.question}</p>
-          <button
-            type="button"
-            aria-label="Save question"
-            onClick={async () => {
-              try {
-                await save({ data: { question: current as unknown as Record<string, unknown> } });
-                setSaved((s) => ({ ...s, [index]: true }));
-                toast.success("Saved to your bookmarks");
-              } catch (error) {
-                toast.error((error as Error).message);
-              }
-            }}
-            className="shrink-0 text-muted-foreground transition-colors hover:text-primary"
-          >
-            {saved[index] ? (
-              <BookmarkCheck className="size-5 text-primary" />
-            ) : (
-              <Bookmark className="size-5" />
-            )}
-          </button>
+          {(!practiceOnly || onBookmark) && (
+            <button
+              type="button"
+              aria-label={isSaved ? "Question saved" : "Save question"}
+              disabled={saving || isSaved}
+              aria-pressed={Boolean(isSaved)}
+              onClick={async () => {
+                if (saveBusy.current) return;
+                saveBusy.current = true;
+                setSaving(true);
+                const savedIndex = index;
+                try {
+                  if (onBookmark) await onBookmark(current);
+                  else
+                    await save({
+                      data: { question: current as unknown as Record<string, unknown> },
+                    });
+                  setSaved((s) => ({ ...s, [savedIndex]: true }));
+                  toast.success("Saved to your bookmarks");
+                } catch (error) {
+                  toast.error((error as Error).message);
+                } finally {
+                  saveBusy.current = false;
+                  setSaving(false);
+                }
+              }}
+              className="shrink-0 text-muted-foreground transition-colors hover:text-primary"
+            >
+              {isSaved ? (
+                <BookmarkCheck className="size-5 text-primary" />
+              ) : (
+                <Bookmark className="size-5" />
+              )}
+            </button>
+          )}
         </div>
 
         <div className="mt-4 space-y-2">
@@ -137,9 +172,8 @@ export function ExamRunner({
               <button
                 key={optionIndex}
                 type="button"
-                onClick={() =>
-                  setAnswers((value) => ({ ...value, [String(index)]: optionIndex }))
-                }
+                disabled={locked || submitting || secondsLeft === 0}
+                onClick={() => setAnswers((value) => ({ ...value, [String(index)]: optionIndex }))}
                 className={cn(
                   "w-full rounded-xl border px-4 py-3 text-left text-sm transition-colors",
                   selected
@@ -153,7 +187,7 @@ export function ExamRunner({
           })}
         </div>
 
-        {answers[String(index)] !== undefined && (
+        {!practiceOnly && answers[String(index)] !== undefined && (
           <button
             type="button"
             onClick={async () => {
@@ -182,6 +216,17 @@ export function ExamRunner({
         {hint && <p className="mt-2 text-xs text-muted-foreground">{hint}</p>}
       </div>
 
+      {practiceOnly && (
+        <p className="mt-3 text-xs text-muted-foreground">
+          Submit before time runs out. Answers and explanations appear with your result.
+        </p>
+      )}
+      {locked && !submitting && (
+        <p role="status" className="mt-3 text-sm text-muted-foreground">
+          Your answers are locked for a safe retry. Use Submit or Finish early to retry the same
+          answers.
+        </p>
+      )}
       <div className="mt-5 flex gap-3">
         <Button
           variant="outline"

@@ -1,7 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect } from "react";
+import { useState } from "react";
+import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useServerFn } from "@tanstack/react-start";
 import {
   ArrowRight,
   CalendarRange,
@@ -12,12 +12,13 @@ import {
   Mic,
   Zap,
 } from "lucide-react";
-import { getDashboard } from "@/lib/prepare.functions";
+import { loadProfile, profileKey, backendRetry, signOutBackend } from "@/lib/backend";
+import { useProgress } from "@/lib/use-progress";
+import { dhakaDate } from "@/lib/progress";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { BottomNav } from "@/components/app/bottom-nav";
 import { BrandLock } from "@/components/app/brand";
-import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
@@ -35,29 +36,37 @@ export const Route = createFileRoute("/_authenticated/dashboard")({
 function Dashboard() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const fetchDashboard = useServerFn(getDashboard);
-
-  const { data, isLoading } = useQuery({ queryKey: ["dashboard"], queryFn: () => fetchDashboard() });
-  const profile = data?.profile;
-
-  useEffect(() => {
-    if (data && !profile?.onboarded) navigate({ to: "/onboarding" });
-  }, [data, profile, navigate]);
-
-  const today = new Date().toISOString().slice(0, 10);
-  const todayActivity = data?.activity.find((row) => row.activity_date === today);
+  const { user } = Route.useRouteContext();
+  const account = useQuery({
+    queryKey: profileKey(user.id),
+    queryFn: ({ signal }) => loadProfile(signal),
+    retry: backendRetry,
+  });
+  const progress = useProgress(user.id);
+  const data = progress.data;
+  const profile = account.data;
+  const isLoading = account.isPending || progress.isPending;
+  const error = account.error || progress.error;
+  const [signingOut, setSigningOut] = useState(false);
   const target = profile?.daily_minutes ?? 60;
-  const done = todayActivity?.minutes ?? 0;
+  const done = Math.floor((data?.stats.daily_study_seconds[dhakaDate()] ?? 0) / 60);
   const pct = Math.min(100, Math.round((done / target) * 100));
   const daysLeft = profile?.exam_date
     ? Math.max(0, Math.ceil((new Date(profile.exam_date).getTime() - Date.now()) / 86400000))
     : null;
 
   async function signOut() {
-    await queryClient.cancelQueries();
-    queryClient.clear();
-    await supabase.auth.signOut();
-    navigate({ to: "/auth", replace: true });
+    setSigningOut(true);
+    try {
+      await signOutBackend();
+      await queryClient.cancelQueries();
+      queryClient.clear();
+      await navigate({ to: "/auth", replace: true });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Sign-out failed. Please retry.");
+    } finally {
+      setSigningOut(false);
+    }
   }
 
   return (
@@ -71,6 +80,7 @@ function Dashboard() {
             variant="ghost"
             size="icon"
             onClick={signOut}
+            disabled={signingOut}
             aria-label="Sign out"
             className="shrink-0 rounded-full"
           >
@@ -80,20 +90,44 @@ function Dashboard() {
 
         <div className="mt-8">
           <h1 className="truncate text-[1.7rem] font-bold leading-tight">
-            {isLoading ? "Loading…" : `Hi, ${profile?.display_name ?? "candidate"}`}
+            {isLoading ? "Loading…" : `Hi, ${profile?.display_name || "candidate"}`}
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
             Target:{" "}
             <span className="font-medium text-primary">
-              {profile?.target_exam ?? "set your exam"}
+              {profile?.target_exam || "set your exam"}
             </span>
             {daysLeft !== null ? ` · ${daysLeft} days left` : ""}
           </p>
         </div>
 
+        {error && (
+          <div role="alert" className="surface-card mt-4 p-4 text-sm">
+            {error.message}
+            <Button
+              variant="outline"
+              className="ml-3"
+              onClick={() => {
+                void account.refetch();
+                void progress.refetch();
+              }}
+            >
+              Retry
+            </Button>
+          </div>
+        )}
+        {!account.isPending && !profile?.target_exam && (
+          <Link
+            to="/onboarding"
+            search={{ backendProfile: true }}
+            className="mt-3 block text-sm text-primary"
+          >
+            Set your exam and daily goal
+          </Link>
+        )}
         {isLoading ? (
           <Skeleton className="mt-6 h-52 w-full rounded-[2rem]" />
-        ) : (
+        ) : !error && data ? (
           <section className="hero-tile relative mt-6 overflow-hidden p-6">
             <div
               aria-hidden
@@ -124,25 +158,55 @@ function Dashboard() {
                 variant="secondary"
                 className="mt-6 h-12 w-full rounded-2xl bg-card font-bold text-primary hover:bg-card/90"
               >
-                <Link to="/mcq">Start MCQ challenge</Link>
+                <Link to="/practice">Start MCQ challenge</Link>
               </Button>
             </div>
           </section>
-        )}
+        ) : null}
 
         <div className="mt-4 grid grid-cols-3 gap-3">
-          <Stat icon={Flame} label="Streak" value={`${profile?.streak ?? 0}d`} tone="gold" />
-          <Stat icon={Zap} label="XP points" value={`${profile?.xp ?? 0}`} tone="primary" />
-          <Stat icon={ListChecks} label="Tests" value={`${data?.attempts.length ?? 0}`} tone="success" />
+          <Stat
+            icon={Flame}
+            label="Streak"
+            value={isLoading || error ? "—" : `${data?.stats.streak ?? 0}d`}
+            tone="gold"
+          />
+          <Stat
+            icon={Zap}
+            label="XP points"
+            value={isLoading || error ? "—" : `${data?.stats.xp ?? 0}`}
+            tone="primary"
+          />
+          <Stat
+            icon={ListChecks}
+            label="Tests"
+            value={isLoading || error ? "—" : `${data?.stats.attempts ?? 0}`}
+            tone="success"
+          />
         </div>
 
         <section className="mt-6 grid grid-cols-2 gap-3">
-          <Tile to="/mcq" icon={ListChecks} title="MCQ Challenge" body="Timed exam-standard sets" />
+          <Tile
+            to="/practice"
+            icon={ListChecks}
+            title="MCQ Challenge"
+            body="Timed exam-standard sets"
+          />
           <Tile to="/viva" icon={Mic} title="AI Viva" body="Simulated board interview" ai />
-          <Tile to="/career" icon={FileText} title="Resume & Letters" body="ATS-ready documents" ai />
+          <Tile
+            to="/career"
+            icon={FileText}
+            title="Resume & Letters"
+            body="ATS-ready documents"
+            ai
+          />
           <Tile to="/roadmap" icon={CalendarRange} title="Study Plan" body="Week-by-week roadmap" />
         </section>
 
+        <p className="mt-3 text-xs text-muted-foreground">
+          Progress from submitted backend tests. Study time includes elapsed time between starting
+          and submitting.
+        </p>
         <section className="mt-8">
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-base font-bold">Recent activity</h2>
@@ -151,7 +215,7 @@ function Dashboard() {
             </Link>
           </div>
           <div className="space-y-2.5">
-            {(data?.attempts ?? []).slice(0, 5).map((row) => {
+            {(error ? [] : (data?.attempts ?? [])).slice(0, 5).map((row) => {
               const scorePct = row.total ? Math.round((row.score / row.total) * 100) : 0;
               return (
                 <div key={row.id} className="bento-tile flex items-center gap-3.5 px-4 py-3">
@@ -177,7 +241,7 @@ function Dashboard() {
                 </div>
               );
             })}
-            {!isLoading && !data?.attempts.length && (
+            {!isLoading && !error && !data?.attempts.length && (
               <div className="bento-tile px-4 py-8 text-center text-sm text-muted-foreground">
                 No tests yet — start your first challenge.
               </div>
